@@ -1,6 +1,6 @@
 package com.phasmidsoftware.dsaipg.adt.threesum;
 
-import com.phasmidsoftware.dsaipg.util.benchmark.Benchmark_Timer;
+import com.phasmidsoftware.dsaipg.util.benchmark.Stopwatch;
 import com.phasmidsoftware.dsaipg.util.benchmark.TimeLogger;
 import com.phasmidsoftware.dsaipg.util.config.Config;
 import com.phasmidsoftware.dsaipg.util.general.Utilities;
@@ -90,7 +90,7 @@ public class ThreeSumBenchmark {
     /**
      * Benchmarks the performance of a specified Three-Sum algorithm implementation
      * using a provided function, input size, and time loggers for result recording.
-     * CONSIDER redefining function as an instance of ThreeSum.
+     * Uses the Stopwatch class to manually measure execution time.
      *
      * @param description  a textual description of the Three-Sum algorithm being benchmarked.
      *                     Used for identification and logging purposes.
@@ -102,8 +102,28 @@ public class ThreeSumBenchmark {
      */
     private void benchmarkThreeSum(final String description, final Consumer<int[]> function, int n, final TimeLogger[] timeLoggers) {
         if (description.equals("ThreeSumCubic") && n > 4000) return;
-        // TO BE IMPLEMENTED 
-                throw new RuntimeException("implementation missing");
+
+        System.out.println(description);
+
+        // Run the benchmark multiple times and collect timing data
+        for (int run = 0; run < runs; run++) {
+            // Generate input array
+            int[] array = supplier.get();
+
+            // Sort the array for algorithms that require it
+            java.util.Arrays.sort(array);
+
+            // Measure execution time using Stopwatch
+            try (Stopwatch stopwatch = new Stopwatch()) {
+                function.accept(array);
+                double elapsedTime = (double) stopwatch.lap(); // Convert to double for TimeLogger
+
+                // Log the result through each TimeLogger
+                for (TimeLogger logger : timeLoggers) {
+                    logger.log(description, elapsedTime, n);  // ✓ THREE parameters: description, time, N
+                }
+            }
+        }
     }
 
     /**
