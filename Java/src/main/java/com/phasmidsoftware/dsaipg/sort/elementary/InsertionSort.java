@@ -76,8 +76,20 @@ public class InsertionSort<X extends Comparable<X>> extends SortWithComparableHe
      */
     public void sort(X[] xs, int from, int to) {
         final Helper<X> helper = getHelper();
-        X a = helper.get(xs, from);
-        for (int i = from + 1; i < to; i++) a = doInsert(xs, from, i, a, helper.get(xs, i), helper);
+
+        // TO BE IMPLEMENTED
+        // Hint: Use the doInsert helper method or implement using helper.swapStableConditional
+        // The original implementation uses: X a = helper.get(xs, from);
+        // for (int i = from + 1; i < to; i++) a = doInsert(xs, from, i, a, helper.get(xs, i), helper);
+
+        // Simple implementation using swapStableConditional:
+        for (int i = from + 1; i < to; i++) {
+            for (int j = i; j > from; j--) {
+                if (!helper.swapStableConditional(xs, j)) {
+                    break;
+                }
+            }
+        }
     }
 
     public static final String DESCRIPTION = "Insertion sort";

@@ -1,6 +1,3 @@
-/*
-  (c) Copyright 2018, 2019 Phasmid Software
- */
 package com.phasmidsoftware.dsaipg.sort.elementary;
 
 import com.phasmidsoftware.dsaipg.sort.generic.Sort;
@@ -65,8 +62,22 @@ public class InsertionSortComparator<X> extends SortWithHelper<X> {
     public void sort(X[] xs, int from, int to) {
         final Helper<X> helper = getHelper();
 
-        // TO BE IMPLEMENTED 
-                throw new RuntimeException("implementation missing");
+        // Insertion sort algorithm
+        // For each element starting from position 1 (from + 1)
+        for (int i = from + 1; i < to; i++) {
+            // Insert xs[i] into the sorted portion xs[from:i]
+            // Move backwards through the sorted portion
+            for (int j = i; j > from; j--) {
+                // Use helper method for comparison and swapping
+                // swapStableConditional compares xs[j] with xs[j-1]
+                // and swaps them if xs[j] < xs[j-1]
+                // Returns true if swap was performed, false otherwise
+                if (!helper.swapStableConditional(xs, j)) {
+                    // If no swap occurred, element is in correct position
+                    break;
+                }
+            }
+        }
     }
 
     public static final String DESCRIPTION = "Insertion sort";
@@ -113,5 +124,4 @@ public class InsertionSortComparator<X> extends SortWithHelper<X> {
             return helper.getFixes();
         }
     }
-
 }

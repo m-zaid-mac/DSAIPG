@@ -215,6 +215,37 @@ public class Timer {
      */
     private <T, U> int doRepeatForIteration(int n, boolean warmup, Supplier<T> supplier, Function<T, U> function, UnaryOperator<T> preFunction, Consumer<U> postFunction, int lastx, int i) {
         // TO BE IMPLEMENTED : note that the timer should be paused when this method is invoked. You may use doPrintStatus to show progress (but optional).
+
+        // Get the input value from supplier
+        T t = supplier.get();
+
+        // Apply pre-function if it exists (not timed)
+        if (preFunction != null) {
+            t = preFunction.apply(t);
+        }
+
+        // Resume timer to start timing
+        resume();
+
+        // Run the function to be timed
+        U u = function.apply(t);
+
+        // Pause and count this as a lap (only if not warmup)
+        if (warmup) {
+            pause();
+        } else {
+            pauseAndLap();
+        }
+
+        // Apply post-function if it exists (not timed)
+        if (postFunction != null) {
+            postFunction.accept(u);
+        }
+
+        // Update status display (optional)
+        int x = (100 * i) / n;
+        lastx = doPrintStatus(lastx, x);
+
         // END SOLUTION
         return lastx;
     }
@@ -302,8 +333,8 @@ public class Timer {
      * @return the number of ticks for the system clock. Currently defined as nano time.
      */
     private static long getClock() {
-        // TO BE IMPLEMENTED 
-         return 0;
+        // TO BE IMPLEMENTED
+        return System.nanoTime();
         // END SOLUTION
     }
 
@@ -320,8 +351,8 @@ public class Timer {
      * @return the corresponding number of milliseconds.
      */
     private static double toMillisecs(long ticks) {
-        // TO BE IMPLEMENTED 
-         return 0;
+        // TO BE IMPLEMENTED
+        return ticks / 1_000_000.0;
         // END SOLUTION
     }
 
