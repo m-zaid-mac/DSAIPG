@@ -125,6 +125,13 @@ public class PriorityQueue_BinaryHeap<K> implements PriorityQueue<K>, Iterable<K
     }
 
     /**
+     * Constructor without arity - defaults to binary heap (arity = 2)
+     */
+    public PriorityQueue_BinaryHeap(boolean max, Object[] binHeap, int first, int m, Comparator<K> comparator, boolean floyd) {
+        this(max, binHeap, first, m, comparator, floyd, 2);
+    }
+
+    /**
      * Secondary constructor which takes only the priority queue's maximum capacity and a comparator
      */
     public PriorityQueue_BinaryHeap(int n, int first, boolean max, Comparator<K> comparator, boolean floyd, int arity) {
