@@ -171,11 +171,22 @@ public class PriorityQueue_BinaryHeap<K> implements PriorityQueue<K>, Iterable<K
             int firstChildIdx = firstChild(i);
             if (!(firstChildIdx <= m + first - 1)) break;
 
-            // Find the best child among all children (based on arity)
             int bestChild = firstChildIdx;
-            for (int c = firstChildIdx + 1; c < Math.min(firstChildIdx + arity, m + first); c++) {
-                if (inverted(bestChild, c)) {
-                    bestChild = c;
+
+            // Optimized logic for binary heap (arity = 2)
+            if (arity == 2) {
+                // For binary heap, only check if second child exists and is better
+                if (firstChildIdx < m + first - 1 && inverted(bestChild, firstChildIdx + 1)) {
+                    bestChild = firstChildIdx + 1;
+                }
+            }
+            // General logic for higher arity heaps
+            else {
+                // Find the best child among all children
+                for (int c = firstChildIdx + 1; c < Math.min(firstChildIdx + arity, m + first); c++) {
+                    if (inverted(bestChild, c)) {
+                        bestChild = c;
+                    }
                 }
             }
 
