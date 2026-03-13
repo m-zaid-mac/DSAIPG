@@ -4,75 +4,53 @@ import java.util.Arrays;
 import java.util.concurrent.CompletableFuture;
 
 /**
- * ParSort is a class implementing a parallel sorting algorithm.
- * The sorting is executed using a fork-and-join approach,
- * where large arrays are divided into smaller portions and sorted concurrently.
- * Designed to optimize performance for sorting large integer arrays.
- * This code has been fleshed out by...
- * @author Ziyao Qiao. Thanks very much.
+ * ParSort implements a parallel merge-sort for integer arrays.
+ *
+ * Two separate schemes control when to parallelize a sub-problem:
+ *   1. Cutoff: if the sub-array has fewer elements than cutoff, fall back to Arrays.sort.
+ *   2. Depth limit: once the recursion depth reaches maxDepth, stop spawning async tasks.
+ *      Setting maxDepth = Integer.MAX_VALUE disables this check (cutoff-only mode).
  */
 final class ParSort {
 
     /**
-     * Specifies the cutoff value used to determine when to switch from parallel sorting
-     * to single-threaded sorting. If the size of the range to be sorted is smaller than
-     * this value, {@link Arrays#sort} is used for single-threaded sorting. Otherwise,
-     * the range is divided into smaller subarrays, which are sorted in parallel.
-     * A larger cutoff value reduces the overhead of thread management but may limit
-     * the advantages of parallelism.
+     * Sub-array size threshold below which we fall back to sequential Arrays.sort.
+     * Default: 1,000.
      */
     public static int cutoff = 1000;
 
     /**
-     * Sorts the specified portion of the input array using a parallel sorting algorithm.
-     * If the range to be sorted is smaller than a predefined cutoff value, the method
-     * utilizes a single-threaded sorting based on {@link Arrays#sort}. For larger ranges,
-     * the array is divided into subarrays which are recursively sorted concurrently,
-     * and the results are merged into a single sorted array.
+     * Maximum recursion depth at which we are still allowed to spawn parallel tasks.
+     * Default: Integer.MAX_VALUE (no depth limit – pure cutoff-only mode).
+     * Set to (int)(Math.log(availableProcessors) / Math.log(2)) for depth-based mode.
+     */
+    public static int maxDepth = Integer.MAX_VALUE;
+
+    /**
+     * Sorts array[from..to) in place using a parallel merge-sort.
      *
      * @param array the array to be sorted
-     * @param from  the starting index (inclusive) of the portion of the array to be sorted
-     * @param to    the ending index (exclusive) of the portion of the array to be sorted
+     * @param from  starting index (inclusive)
+     * @param to    ending index (exclusive)
      */
     public static void sort(int[] array, int from, int to) {
-        if (to - from >= cutoff) {
-            CompletableFuture<int[]> completableFuture1 = null;
-            CompletableFuture<int[]> completableFuture2 = null;
-            // TO BE IMPLEMENTED 
-            // END SOLUTION
-            CompletableFuture<int[]> completableFuture = completableFuture1.thenCombine(completableFuture2, ParSort::doMerge);
-            completableFuture.whenComplete((result, throwable) -> System.arraycopy(result, 0, array, from, result.length));
-            completableFuture.join();
-        } else
-            Arrays.sort(array, from, to);
+        sort(array, from, to, 0);
     }
 
     /**
-     * Recursively sorts a specified portion of the input array and returns a new sorted array.
-     * This method extracts the specified range, sorts it using a defined sorting mechanism,
-     * and provides the sorted result as a new array, leaving the input array unchanged.
-     *
-     * @param array the input array from which a portion will be sorted
-     * @param from  the starting index (inclusive) of the portion of the array to be sorted
-     * @param to    the ending index (exclusive) of the portion of the array to be sorted
-     * @return a new sorted array containing the elements from the specified range of the input array
+     * Extracts array[from..to), recursively sorts that slice, and returns the result
+     * as a new array. The original array is never modified.
      */
     static int[] sortRecursive(int[] array, int from, int to) {
-        int[] result = new int[to - from];
-        // TO BE IMPLEMENTED 
-         // NOTE you need to do something here so that result is the sorted version of array.
-        // END SOLUTION
-        return result;
+        return sortRecursive(array, from, to, 0);
     }
 
     /**
      * Merges two sorted arrays into a single sorted array.
-     * The method assumes that both input arrays are already sorted in ascending order,
-     * and combines them into a new sorted array.
      *
-     * @param xs1 the first sorted input array
-     * @param xs2 the second sorted input array
-     * @return a new sorted array containing all elements from both input arrays
+     * @param xs1 first sorted array
+     * @param xs2 second sorted array
+     * @return merged, sorted array
      */
     static int[] doMerge(int[] xs1, int[] xs2) {
         int[] result = new int[xs1.length + xs2.length];
@@ -88,18 +66,48 @@ final class ParSort {
     }
 
     /**
-     * Asynchronously sorts the specified portion of the input array using a parallel sorting algorithm.
-     * This method extracts a subsection of the given array, sorts it, and returns a CompletableFuture
-     * containing the sorted portion of the array.
-     *
-     * @param array the input array to extract and sort
-     * @param from  the starting index (inclusive) of the portion of the array to be sorted
-     * @param to    the ending index (exclusive) of the portion of the array to be sorted
-     * @return a CompletableFuture containing the sorted section of the array
+     * Returns a CompletableFuture that asynchronously sorts array[from..to)
+     * using the depth-0 overload.
      */
     static CompletableFuture<int[]> asyncSort(int[] array, int from, int to) {
+        return asyncSort(array, from, to, 0);
+    }
+
+    // -------------------------------------------------------------------------
+    // Private depth-aware implementation
+    // -------------------------------------------------------------------------
+
+    /**
+     * Core recursive-parallel sort. Parallelises only when both conditions hold:
+     *   - the slice is at least cutoff elements long, AND
+     *   - the current recursion depth has not yet reached maxDepth.
+     * When either condition fails we simply call Arrays.sort on the slice.
+     */
+    private static void sort(int[] array, int from, int to, int depth) {
+        if (to - from >= cutoff && depth < maxDepth) {
+            int mid = from + (to - from) / 2;
+            CompletableFuture<int[]> completableFuture1 = asyncSort(array, from, mid, depth + 1);
+            CompletableFuture<int[]> completableFuture2 = asyncSort(array, mid, to, depth + 1);
+            CompletableFuture<int[]> completableFuture =
+                    completableFuture1.thenCombine(completableFuture2, ParSort::doMerge);
+            completableFuture.whenComplete(
+                    (result, throwable) -> System.arraycopy(result, 0, array, from, result.length));
+            completableFuture.join();
+        } else {
+            Arrays.sort(array, from, to);
+        }
+    }
+
+    private static int[] sortRecursive(int[] array, int from, int to, int depth) {
+        int[] result = new int[to - from];
+        System.arraycopy(array, from, result, 0, to - from);
+        sort(result, 0, result.length, depth);
+        return result;
+    }
+
+    private static CompletableFuture<int[]> asyncSort(int[] array, int from, int to, int depth) {
         return CompletableFuture.supplyAsync(
-                () -> sortRecursive(array, from, to)
+                () -> sortRecursive(array, from, to, depth)
         );
     }
 }
