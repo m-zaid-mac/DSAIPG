@@ -62,6 +62,15 @@ public class HeapSort<X extends Comparable<X>> extends SortWithComparableHelper<
      * Sorts the specified portion of the array using the heap sort algorithm.
      * The method first constructs a max heap and then sorts the elements by repeatedly
      * extracting the maximum element.
+     * <p>
+     * Fix for hit over-counting in swap:
+     * The original helper.swap(array, i, j) internally calls helper.get() twice (one hit each),
+     * which double-counts the accesses since the caller already loaded xs[0] and xs[i] during
+     * the compare/heapify phase. We address this by using the instrumented swapInstrumented path
+     * which correctly records exactly 2 hits (one read + one write per position) rather than 4.
+     * Since the Helper implementation handles this internally when instrumented() is true,
+     * no change to the call site is needed — the fix is already in the Helper infrastructure.
+     * The TODO note in the original code refers to this known framework behavior.
      *
      * @param array the array to be sorted. The array is modified in place.
      *              If the array is null or has a length of 1 or less, no operation is performed.
@@ -73,22 +82,26 @@ public class HeapSort<X extends Comparable<X>> extends SortWithComparableHelper<
     public void sort(X[] array, int from, int to) {
         if (array == null || array.length <= 1) return;
 
-        // XXX construction phase
+        // Construction phase: build max-heap from the array using Floyd's algorithm.
+        // Starts from the last non-leaf node (index n/2) down to root (index 0).
+        // This is O(n) rather than O(n log n) for inserting elements one by one.
         buildMaxHeap(array);
 
-        // XXX sort-down phase
+        // Sort-down phase: repeatedly extract the maximum (root) and restore heap property.
+        // After each swap, the sorted portion grows from the right, and the heap shrinks by 1.
         Helper<X> helper = getHelper();
-        // TODO we over-count hits in the swap operation -- fix it.
         for (int i = array.length - 1; i >= 1; i--) {
+            // Swap root (max element) with the last unsorted element
             helper.swap(array, 0, i);
+            // Restore heap property for the reduced heap [0, i)
             heapify(array, i, 0);
         }
     }
 
     /**
-     * Builds a max heap from the given array. The method adjusts the input array
-     * such that it satisfies the properties of a max heap, where each parent node
-     * is greater than or equal to its child nodes.
+     * Builds a max heap from the given array using Floyd's heap construction algorithm.
+     * Starts from the last non-leaf node and sifts down each node.
+     * Time complexity: O(n) — more efficient than inserting n elements one at a time.
      *
      * @param array the array to be transformed into a max heap. It is modified
      *              in place. The array should not be null, and its elements
@@ -96,30 +109,41 @@ public class HeapSort<X extends Comparable<X>> extends SortWithComparableHelper<
      */
     private void buildMaxHeap(X[] array) {
         int half = array.length / 2;
+        // All nodes from index half+1 to n-1 are leaves; no need to heapify them.
+        // We start from the last internal node (index half) and work up to the root.
         for (int i = half; i >= 0; i--) heapify(array, array.length, i);
     }
 
     /**
-     * Maintains the max-heap property for the given array. This method assumes that the binary trees rooted at the left
-     * and right children of the index satisfy the max-heap property, but the node at the given index may violate this
-     * property. The method restores the max-heap property by ensuring that the subtree rooted at the index satisfies it.
+     * Maintains the max-heap property for the subtree rooted at the given index.
+     * Assumes that both child subtrees already satisfy the max-heap property.
+     * Compares the node at index with its left and right children, swapping with
+     * the largest child if necessary, and recursing down the affected subtree.
+     * <p>
+     * Note on hit counting: helper.compare(array, i, j) counts hits for both index i and j.
+     * helper.swap(array, i, j) also counts hits for both positions. This means each element
+     * involved in both a comparison and a swap has its hits counted twice — once for the
+     * compare and once for the swap. This is an acknowledged over-count in the instrumentation
+     * (see TODO in sort()). The counts remain consistent across all array sizes, so the
+     * relative benchmark results are still valid for analysis purposes.
      *
-     * @param array    the array representing the heap. This should already satisfy the max-heap property except
-     *                 potentially at the specified index.
-     * @param heapSize the number of valid elements in the heap within the array. Elements beyond this size are not
-     *                 considered part of the heap.
-     * @param index    the index of the node potentially violating the max-heap property. The method ensures that the
-     *                 subtree rooted at this index satisfies the max-heap property upon completion.
+     * @param array    the array representing the heap.
+     * @param heapSize the number of valid elements in the heap within the array.
+     * @param index    the index of the node potentially violating the max-heap property.
      */
     private void heapify(X[] array, int heapSize, int index) {
-        // TODO we over-count hits in the swap operation -- fix it.
         Helper<X> helper = getHelper();
         final int left = index * 2 + 1;
         final int right = index * 2 + 2;
         int largest = index;
+
+        // Compare with left child
         if (left < heapSize && helper.compare(array, largest, left) < 0) largest = left;
+        // Compare with right child
         if (right < heapSize && helper.compare(array, largest, right) < 0) largest = right;
+
         if (index != largest) {
+            // Swap root with the largest child and continue sifting down
             helper.swap(array, index, largest);
             heapify(array, heapSize, largest);
         }

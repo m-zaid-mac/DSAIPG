@@ -11,6 +11,16 @@ import static com.phasmidsoftware.dsaipg.sort.helper.InstrumentedComparatorHelpe
 
 /**
  * Class QuickSort_DualPivot which extends QuickSort.
+ * <p>
+ * Dual-pivot QuickSort uses two pivot values (v1 and v2, where v1 <= v2) to partition the array
+ * into three regions:
+ *   [from, lt)  — elements less than v1
+ *   [lt+1, gt)  — elements between v1 and v2 (inclusive)
+ *   [gt+1, to)  — elements greater than v2
+ * <p>
+ * This typically reduces comparisons compared to classic single-pivot QuickSort because elements
+ * between the two pivots are placed correctly without needing to recurse over the full range.
+ * Java's Arrays.sort() uses this algorithm for primitive arrays.
  *
  * @param <X> the underlying comparable type.
  */
@@ -43,7 +53,7 @@ public class QuickSort_DualPivot<X extends Comparable<X>> extends QuickSort<X> {
     }
 
     /**
-     * Constructor for QuickSort_3way
+     * Constructor for QuickSort_DualPivot.
      *
      * @param helper an explicit instance of Helper to be used.
      */
@@ -53,7 +63,7 @@ public class QuickSort_DualPivot<X extends Comparable<X>> extends QuickSort<X> {
     }
 
     /**
-     * Constructor for QuickSort_3way
+     * Constructor for QuickSort_DualPivot.
      *
      * @param N      the number elements we expect to sort.
      * @param nRuns  the number of runs.
@@ -64,7 +74,7 @@ public class QuickSort_DualPivot<X extends Comparable<X>> extends QuickSort<X> {
     }
 
     /**
-     * Constructor for QuickSort_3way
+     * Constructor for QuickSort_DualPivot.
      *
      * @param N      the number elements we expect to sort.
      * @param config the configuration.
@@ -77,12 +87,21 @@ public class QuickSort_DualPivot<X extends Comparable<X>> extends QuickSort<X> {
      * This class implements a dual-pivot partitioning strategy for use in sorting algorithms, such as quicksort.
      * Dual-pivot partitioning is an optimization of the classic quicksort partitioning approach, utilizing two pivots
      * to divide the input data into three distinct regions for more efficient sorting.
+     * <p>
+     * Partitioning steps:
+     * 1. Ensure xs[p1] <= xs[p2] (swap if needed) — these become v1 and v2.
+     * 2. Maintain three pointers: lt (left boundary), gt (right boundary), i (current element).
+     * 3. For each element x at position i:
+     *    - If x < v1: swap with xs[lt] and advance both lt and i.
+     *    - If x > v2: swap with xs[gt] and retreat gt (do NOT advance i, new element at i is unknown).
+     *    - Otherwise: advance i (element is in the middle region).
+     * 4. Place pivots at their final positions: swap v1 into lt-1, v2 into gt+1.
+     * 5. Return three sub-partitions: [p1, lt), [lt+1, gt), [gt+1, p2+1].
      */
     public class Partitioner_DualPivot implements Partitioner<X> {
 
         /**
          * Constructor for Partitioner_DualPivot.
-         * This constructor initializes the Partitioner_DualPivot instance with a provided helper.
          *
          * @param helper a Helper instance that provides utility methods and support for the partitioning process.
          */
@@ -91,10 +110,11 @@ public class QuickSort_DualPivot<X extends Comparable<X>> extends QuickSort<X> {
         }
 
         /**
-         * Method to partition the given partition into smaller partitions.
+         * Method to partition the given partition into three smaller partitions using dual-pivot strategy.
          *
-         * @param partition the partition to divide up.
-         * @return a list of partitions, whose length depends on the sorting method being used.
+         * @param partition the partition to divide up. Must have at least 3 elements.
+         * @return a list of three partitions: less-than-v1, between-v1-and-v2, greater-than-v2.
+         * @throws SortException if the partition has fewer than 3 elements.
          */
         public List<Partition<X>> partition(Partition<X> partition) {
             int n = partition.to - partition.from;
@@ -102,15 +122,26 @@ public class QuickSort_DualPivot<X extends Comparable<X>> extends QuickSort<X> {
             final X[] xs = partition.xs;
             final int p1 = partition.from;
             final int p2 = partition.to - 1;
+
+            // Ensure the left pivot <= right pivot, then capture pivot values.
+            // We read them as plain array accesses (no hit counted) because these
+            // are pivot setup reads, not data-comparison reads.
             helper.swapConditional(xs, p1, p2);
+            final X v1 = xs[p1]; // left pivot value — fixed for the entire loop
+            final X v2 = xs[p2]; // right pivot value — fixed for the entire loop
             int lt = p1 + 1;
             int gt = p2 - 1;
             int i = lt;
-            X v1 = xs[p1];
-            X v2 = xs[p2];
-            // NOTE: we are trying to avoid checking on instrumented for every time in the inner loop for performance reasons (probably a silly idea).
-            // NOTE: if we were using Scala, it would be easy to set up a comparer function and a swapper function. With java, it's possible but much messier.
+
+            // Single unified loop. Compare each xs[i] against the captured pivot values
+            // using helper.compare(xs[i], v1) / helper.compare(xs[i], v2) — these count
+            // one hit for xs[i] per comparison (the pivot values are already loaded).
+            // helper.swap counts hits and fixes correctly for both instrumented and plain helpers.
             if (helper.instrumented()) {
+                // NOTE: we are trying to avoid checking on instrumented for every time in the inner loop
+                // for performance reasons (probably a silly idea).
+                // NOTE: if we were using Scala, it would be easy to set up a comparer function and a
+                // swapper function. With java, it's possible but much messier.
                 X xlt = helper.get(xs, lt);
                 X xgt = helper.get(xs, gt);
                 X x = xs[i]; // no hit since i = lt
@@ -118,7 +149,7 @@ public class QuickSort_DualPivot<X extends Comparable<X>> extends QuickSort<X> {
                     // Each time around the loop, we invoke: 2, 1, or 1 hits; 1, 2, or 2 lookups
                     if (helper.compare(x, v1) < 0) { // no hits, one lookup
                         helper.swapVW(xlt, x, xs, lt++, i++); // no hits or lookups
-                        x = helper.get(xs, i); // one hit
+                        x = helper.get(xs, i);   // one hit
                         xlt = helper.get(xs, lt); // one hit (CONSIDER is this correct?)
                         if (i == gt) xgt = x;
                     } else if (helper.compare(x, v2) > 0) { // no hits, one lookup (but it's already in cache)
@@ -131,19 +162,22 @@ public class QuickSort_DualPivot<X extends Comparable<X>> extends QuickSort<X> {
                         x = helper.get(xs, i); // one hit
                     }
                 }
-                if (p1 != lt - 1) helper.swap(xs, p1, --lt);
-                if (p2 != gt + 1) helper.swap(xs, p2, ++gt);
+                if (p1 != lt - 1) helper.swap(xs, p1, --lt); else --lt;
+                if (p2 != gt + 1) helper.swap(xs, p2, ++gt); else ++gt;
             } else {
+                // Non-instrumented path — plain comparisons and swaps.
                 while (i <= gt) {
                     X x = xs[i];
                     if (x.compareTo(v1) < 0) {
-                        swap(xs, lt++, i++);
+                        if (lt != i) { X t = xs[lt]; xs[lt] = xs[i]; xs[i] = t; }
+                        lt++; i++;
                     } else if (x.compareTo(v2) > 0) {
-                        swap(xs, i, gt--);
+                        if (i != gt) { X t = xs[i]; xs[i] = xs[gt]; xs[gt] = t; }
+                        gt--;
                     } else i++;
                 }
-                swap(xs, p1, --lt);
-                swap(xs, p2, ++gt);
+                if (p1 != lt - 1) { X t = xs[p1]; xs[p1] = xs[--lt]; xs[lt] = t; } else --lt;
+                if (p2 != gt + 1) { X t = xs[p2]; xs[p2] = xs[++gt]; xs[gt] = t; } else ++gt;
             }
 
             List<Partition<X>> partitions = new ArrayList<>();
@@ -151,20 +185,6 @@ public class QuickSort_DualPivot<X extends Comparable<X>> extends QuickSort<X> {
             partitions.add(new Partition<>(xs, lt + 1, gt));
             partitions.add(new Partition<>(xs, gt + 1, p2 + 1));
             return partitions;
-        }
-
-        /**
-         * Swaps the elements at the specified positions in the given array.
-         * CONSIDER invoke swap in Helper.
-         *
-         * @param ys the array in which the elements need to be swapped
-         * @param i  the index of the first element to be swapped
-         * @param j  the index of the second element to be swapped
-         */
-        private void swap(X[] ys, int i, int j) {
-            X temp = ys[i];
-            ys[i] = ys[j];
-            ys[j] = temp;
         }
 
         private final Helper<X> helper;

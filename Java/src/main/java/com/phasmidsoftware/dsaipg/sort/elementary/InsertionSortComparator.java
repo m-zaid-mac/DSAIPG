@@ -1,3 +1,6 @@
+/*
+  (c) Copyright 2018, 2019 Phasmid Software
+ */
 package com.phasmidsoftware.dsaipg.sort.elementary;
 
 import com.phasmidsoftware.dsaipg.sort.generic.Sort;
@@ -53,29 +56,26 @@ public class InsertionSortComparator<X> extends SortWithHelper<X> {
     }
 
     /**
-     * Sort the sub-array xs:from:to using insertion sort.
+     * Sort the sub-array xs[from..to) using insertion sort.
+     * Uses helper.compare(xs, i, j) so that the instrumented helper correctly
+     * records comparisons, hits, swaps, and fixes (inversions) via helper.swap().
      *
-     * @param xs   sort the array xs from "from" to "to".
-     * @param from the index of the first element to sort
-     * @param to   the index of the first element not to sort
+     * Algorithm: for each element at position i (starting from from+1),
+     * shift it left past any larger neighbours until it is in its sorted position.
+     *
+     * @param xs   the array to sort (modified in place).
+     * @param from the index of the first element to sort (inclusive).
+     * @param to   the index of the first element NOT to sort (exclusive).
      */
     public void sort(X[] xs, int from, int to) {
         final Helper<X> helper = getHelper();
-
-        // Insertion sort algorithm
-        // For each element starting from position 1 (from + 1)
+        // Walk from the second element of the range to the last.
         for (int i = from + 1; i < to; i++) {
-            // Insert xs[i] into the sorted portion xs[from:i]
-            // Move backwards through the sorted portion
-            for (int j = i; j > from; j--) {
-                // Use helper method for comparison and swapping
-                // swapStableConditional compares xs[j] with xs[j-1]
-                // and swaps them if xs[j] < xs[j-1]
-                // Returns true if swap was performed, false otherwise
-                if (!helper.swapStableConditional(xs, j)) {
-                    // If no swap occurred, element is in correct position
-                    break;
-                }
+            // Shift xs[i] left as long as its left neighbour is greater.
+            // helper.compare(xs, j-1, j) counts hits and uses the configured comparator.
+            // helper.swap(xs, j-1, j) counts swaps and fixes (inversions).
+            for (int j = i; j > from && helper.compare(xs, j - 1, j) > 0; j--) {
+                helper.swap(xs, j - 1, j);
             }
         }
     }
@@ -111,9 +111,12 @@ public class InsertionSortComparator<X> extends SortWithHelper<X> {
 
     /**
      * This method is designed to count inversions in quadratic time, using insertion sort.
+     * Each swap performed by insertion sort corresponds to exactly one inversion in the original array,
+     * so helper.getFixes() returns the exact inversion count after sorting.
      *
-     * @param ts  an array of comparable T elements.
-     * @param <T> the underlying type of the elements.
+     * @param ts         an array of comparable T elements.
+     * @param comparator the comparator defining element ordering.
+     * @param <T>        the underlying type of the elements.
      * @return the number of inversions in ts, which remains unchanged.
      */
     public static <T> long countInversions(T[] ts, Comparator<T> comparator) {
@@ -124,4 +127,5 @@ public class InsertionSortComparator<X> extends SortWithHelper<X> {
             return helper.getFixes();
         }
     }
+
 }

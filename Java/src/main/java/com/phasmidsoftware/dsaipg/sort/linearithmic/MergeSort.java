@@ -128,28 +128,72 @@ public class MergeSort<X extends Comparable<X>> extends SortWithComparableHelper
 
     /**
      * Sorts the given range of the array using merge sort with optional optimizations for insurance and no-copy.
-     * When called with no-copy true, both primary and secondary partitions
-     * (but not necessary the entire arrays) will be identical.
-     * When called with no-copy false, the secondary array will be undefined.
      *
-     * @param primary    the primary array.
-     *                   If the partition is small, insertion sort will be applied to this array.
-     * @param secondary  the auxiliary array used for intermediate storage during sorting.
-     * @param from the starting index (inclusive) of the range to be sorted.
-     * @param to   the ending index (exclusive) of the range to be sorted.
+     * When noCopy is true, both primary and secondary hold identical data for the range [from, to)
+     * before each recursive call. We sort the secondary array and merge results back into primary,
+     * avoiding a final copy-back at every level.
+     *
+     * When noCopy is false (standard path), we sort primary recursively, merge into secondary,
+     * then copy secondary back into primary.
+     *
+     * The insurance optimization skips the merge entirely when the two halves are already in
+     * sorted order relative to each other (i.e., primary[mid-1] <= primary[mid]).
+     *
+     * @param primary    the primary (output) array for this recursive level.
+     * @param secondary  the auxiliary array used as source when noCopy is true, or as merge target otherwise.
+     * @param from       the starting index (inclusive) of the range to be sorted.
+     * @param to         the ending index (exclusive) of the range to be sorted.
      */
     private void sort(X[] primary, X[] secondary, int from, int to) {
         Config config = helper.getConfig();
-        boolean noCopy = config.getBoolean(MERGESORT, NOCOPY); // XXX I recommend that you test noCopy before testing insurance.
+        // NOTE: test noCopy before insurance as recommended in the TODO comment
+        boolean noCopy = config.getBoolean(MERGESORT, NOCOPY);
         boolean insurance = config.getBoolean(MERGESORT, INSURANCE);
-        assert !noCopy || Arrays.compare(primary, from, to, secondary, from, to) == 0 : "MergeSort::sort: partitions are not the same";
-        if (to <= from + helper.cutoff()) { // XXX check that a cutoff value of 1 effectively stops the cutoff mechanism.
+
+        // Verify invariant: when noCopy, both arrays must hold the same data in [from, to)
+        assert !noCopy || Arrays.compare(primary, from, to, secondary, from, to) == 0
+                : "MergeSort::sort: partitions are not the same";
+
+        // Base case: for small partitions, insertion sort is faster
+        // A cutoff of 1 means every partition falls through to insertion sort immediately (no recursion benefit)
+        if (to <= from + helper.cutoff()) {
             insertionSort.sort(primary, from, to);
             return;
         }
 
-        // TO BE IMPLEMENTED  : implement merge sort with no-copy and insurance optimizations (use helper.less and helper.copyBlock)
-                throw new RuntimeException("implementation missing");
+        int mid = from + (to - from) / 2;
+
+        if (noCopy) {
+            // No-copy path:
+            // Roles are swapped: we recursively sort into secondary (using primary as its aux),
+            // so that after recursion, secondary[from..mid) and secondary[mid..to) are sorted.
+            // Then we merge secondary -> primary directly, with no copy-back needed.
+            sort(secondary, primary, from, mid);
+            sort(secondary, primary, mid, to);
+
+            // Insurance check: if secondary[mid-1] <= secondary[mid], the range is already sorted.
+            // Just copy the block from secondary into primary and return.
+            if (insurance && helper.compare(secondary, mid - 1, mid) < 0) {
+                helper.copyBlock(secondary, from, primary, from, to - from);
+                return;
+            }
+            merge(secondary, primary, from, mid, to);
+
+        } else {
+            // Standard path:
+            // Recursively sort both halves of primary in place.
+            sort(primary, secondary, from, mid);
+            sort(primary, secondary, mid, to);
+
+            // Insurance check: if primary[mid-1] <= primary[mid], both halves are already in order.
+            // No merge needed; primary is already sorted in this range.
+            if (insurance && helper.compare(primary, mid - 1, mid) < 0) {
+                return;
+            }
+            // Merge sorted halves from primary into secondary, then copy back.
+            merge(primary, secondary, from, mid, to);
+            helper.copyBlock(secondary, from, primary, from, to - from);
+        }
     }
 
     /**
